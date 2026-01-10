@@ -1,5 +1,7 @@
 # Redirect Manager for CMS Builder
 
+> **Note:** This plugin only works with CMS Builder, available for download at https://www.interactivetools.com/download/
+
 Manage 301/302 URL redirects through the admin UI instead of manually editing .htaccess files.
 
 ## Requirements
