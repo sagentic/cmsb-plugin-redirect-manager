@@ -887,7 +887,15 @@ function sendWarningEmail(array $chains, array $loops): bool
 
 	$body .= t('Please review and fix these issues in the Redirect Manager plugin.');
 
-	return mail($settings['notificationEmail'], $subject, $body);
+	// Send through CMS mail settings (never PHP mail())
+	$errors = \sendMessage([
+		'from'    => \settings('mail.adminEmail'),
+		'to'      => $settings['notificationEmail'],
+		'subject' => $subject,
+		'text'    => $body,
+	]);
+
+	return !$errors;
 }
 
 /**

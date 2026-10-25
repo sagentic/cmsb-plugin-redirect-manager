@@ -2,7 +2,7 @@
 /*
 Plugin Name: Redirect Manager
 Description: Manage 301/302 URL redirects through the admin UI instead of manually editing .htaccess files
-Version: 1.00
+Version: 1.01
 CMS Version Required: 3.50
 Author: Sagentic Web Design
 Author URI: https://www.sagentic.com
@@ -10,20 +10,21 @@ Author URI: https://www.sagentic.com
 
 namespace RedirectManager;
 
-// Don't run from command-line
-if (\inCLI()) {
-	return;
-}
-
 // Plugin constants
 $GLOBALS['REDIRECTMANAGER_PLUGIN'] = true;
-$GLOBALS['REDIRECTMANAGER_VERSION'] = '1.00';
+$GLOBALS['REDIRECTMANAGER_VERSION'] = '1.01';
 
 // Load helper functions
 require_once __DIR__ . '/redirectManager_functions.php';
 
-// Register cron job for log cleanup
-addAction('_cron_daily', 'RedirectManager\dailyMaintenance', null, 0);
+// Register scheduled task (dispatched by webadmin/cron.php, which runs from the command line,
+// so it must be registered before the command-line check below)
+\addCronJob('RedirectManager\dailyMaintenance', 'Redirect Manager - Daily Maintenance', '15 4 * * *');
+
+// Don't register anything else from command-line
+if (\inCLI()) {
+	return;
+}
 
 // Initialize plugin (create table if needed)
 addAction('admin_postlogin', 'RedirectManager\pluginInit', null, -999);
@@ -52,14 +53,17 @@ function pluginInit(): void
 
 /**
  * Daily maintenance - cleanup old hit logs based on retention setting
+ * Called by daily cron; returns a summary for the Background Tasks log
  */
-function dailyMaintenance(): void
+function dailyMaintenance(): string
 {
+	createRedirectsTableIfNeeded();
 	$settings = loadPluginSettings();
 
 	// Clean old hit data if retention is set
+	$cleared = 0;
 	if ($settings['logRetentionDays'] > 0 && $settings['trackHits']) {
-		cleanOldHitLogs($settings['logRetentionDays']);
+		$cleared = cleanOldHitLogs($settings['logRetentionDays']);
 	}
 
 	// Check for chains/loops
@@ -67,7 +71,11 @@ function dailyMaintenance(): void
 	$loops = detectLoops();
 
 	// Email warning if found
+	$emailed = false;
 	if (($chains || $loops) && !empty($settings['notificationEmail'])) {
-		sendWarningEmail($chains, $loops);
+		$emailed = sendWarningEmail($chains, $loops);
 	}
+
+	return sprintf('Cleared hits on %d redirects; %d chains, %d loops%s',
+		$cleared, count($chains), count($loops), $emailed ? '; warning emailed' : '');
 }
